@@ -1,10 +1,14 @@
 package cache
 
 import (
+	"math"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/argoproj/gitops-engine/pkg/cache"
 	"github.com/argoproj/gitops-engine/pkg/cache/mocks"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
 	appv1 "github.com/argoproj/argo-cd/pkg/apis/application/v1alpha1"
@@ -49,4 +53,14 @@ func TestHandleModEvent_NoChanges(t *testing.T) {
 		Server: "https://mycluster",
 		Config: appv1.ClusterConfig{Username: "bar"},
 	})
+}
+
+func TestParseDurationFromEnv(t *testing.T) {
+	os.Setenv(EnvClusterCacheWatchResyncDuration, "1m")
+	dur := ParseDurationFromEnv(EnvClusterCacheWatchResyncDuration, clusterCacheWatchResyncDuration, 0, math.MaxInt64)
+	assert.Equal(t, time.Minute, dur)
+
+	os.Setenv(EnvClusterCacheWatchResyncDuration, "1h")
+	dur = ParseDurationFromEnv(EnvClusterCacheWatchResyncDuration, clusterCacheWatchResyncDuration, 0, math.MaxInt64)
+	assert.Equal(t, time.Hour, dur)
 }
