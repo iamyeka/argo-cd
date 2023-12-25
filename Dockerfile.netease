@@ -1,0 +1,29 @@
+
+####################################################################################################
+# Argo CD Build stage which performs the actual build of Argo CD binaries
+####################################################################################################
+FROM golang:1.14.1 as argocd-build
+ENV GOPROXY=https://goproxy.cn,direct
+
+COPY ./packr_1.21.9_linux_amd64.tar.gz /tmp/
+RUN tar -zxvf /tmp/packr_1.21.9_linux_amd64.tar.gz -C /tmp/ && \
+    mv /tmp/packr /usr/local/bin/packr
+
+WORKDIR /go/src/github.com/argoproj/argo-cd
+
+COPY . .
+
+RUN go mod download
+RUN make controller
+
+ARG BUILD_ALL_CLIS=true
+RUN if [ "$BUILD_ALL_CLIS" = "true" ] ; then \
+    make CLI_NAME=argocd-darwin-amd64 GOOS=darwin cli-local && \
+    make CLI_NAME=argocd-windows-amd64.exe GOOS=windows cli-local \
+    ; fi
+
+####################################################################################################
+# Final image
+####################################################################################################
+FROM hub-inner.cn-east-p1.netease.com/staffyun163music/cloudnative/argocd/argoproj/argocd:v1.7.6 as base
+COPY --from=argocd-build /go/src/github.com/argoproj/argo-cd/dist/argocd-application-controller /usr/local/bin/
