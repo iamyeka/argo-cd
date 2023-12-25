@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"time"
 
@@ -107,6 +109,7 @@ func newCommand() *cobra.Command {
 			stats.RegisterHeapDumper("memprofile")
 
 			go appController.Run(ctx, statusProcessors, operationProcessors)
+			go http.ListenAndServe("0.0.0.0:6060", nil)
 
 			// Wait forever
 			select {}

@@ -3,7 +3,7 @@ stages:
 
 before_script:
   - APP_REVISION="${CI_COMMIT_TAG:-${CI_COMMIT_REF_NAME##*/}-r$CI_PIPELINE_ID}"
-  - REPOSITORY_PREFIX="hub-inner.cn-east-p1.netease.com/staffyun163music/cloudnative/argocd/argoproj"
+  - REPOSITORY_PREFIX="harbor.yf-online.service.163.org/cloudnative/argoproj"
 
 build:
   stage: package
