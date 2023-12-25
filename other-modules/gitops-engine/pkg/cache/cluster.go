@@ -492,9 +492,11 @@ func (c *clusterCache) watchEvents(ctx context.Context, api kube.APIResourceInfo
 					return fmt.Errorf("Failed to convert to *unstructured.Unstructured: %v", event.Object)
 				}
 
+				st2 := time.Now()
 				c.log.Debugf(fmt.Sprintf("watchEvents: watched %s, %s on %s", obj.GetName(), event.Type, c.config.Host))
 				c.processEvent(event.Type, obj)
-				c.log.Debugf(fmt.Sprintf("watchEvents: watched %s, %s on %s finished", obj.GetName(), event.Type, c.config.Host))
+				c.log.Debugf(fmt.Sprintf("watchEvents: watched %s %s, %s on %s finished, cost %v, left %d in channel",
+					obj.GetObjectKind().GroupVersionKind(), obj.GetName(), event.Type, c.config.Host, time.Since(st2), len(w.ResultChan())))
 				if kube.IsCRD(obj) {
 					if event.Type == watch.Deleted {
 						group, groupOk, groupErr := unstructured.NestedString(obj.Object, "spec", "group")
