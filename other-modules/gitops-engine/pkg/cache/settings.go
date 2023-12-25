@@ -105,3 +105,10 @@ func SetResyncTimeout(timeout time.Duration) UpdateSettingsFunc {
 		cache.resyncTimeout = timeout
 	}
 }
+
+// SetWatchResyncTimeout updates cluster re-sync timeout
+func SetWatchResyncTimeout(timeout time.Duration) UpdateSettingsFunc {
+	return func(cache *clusterCache) {
+		cache.watchResyncTimeout = timeout
+	}
+}

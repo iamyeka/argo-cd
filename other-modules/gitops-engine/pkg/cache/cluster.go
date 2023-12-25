@@ -29,7 +29,7 @@ import (
 
 const (
 	clusterResyncTimeout       = 24 * time.Hour
-	watchResyncTimeout         = 10 * time.Minute
+	defaultWatchResyncTimeout  = 10 * time.Minute
 	watchResourcesRetryTimeout = 1 * time.Second
 	ClusterRetryTimeout        = 10 * time.Second
 
@@ -112,6 +112,7 @@ type WeightedSemaphore interface {
 func NewClusterCache(config *rest.Config, opts ...UpdateSettingsFunc) *clusterCache {
 	cache := &clusterCache{
 		resyncTimeout:           clusterResyncTimeout,
+		watchResyncTimeout:      defaultWatchResyncTimeout,
 		settings:                Settings{ResourceHealthOverride: &noopSettings{}, ResourcesFilter: &noopSettings{}},
 		apisMeta:                make(map[schema.GroupKind]*apiMeta),
 		listPageSize:            defaultListPageSize,
@@ -164,6 +165,9 @@ type clusterCache struct {
 	populateResourceInfoHandler OnPopulateResourceInfoHandler
 	resourceUpdatedHandlers     map[uint64]OnResourceUpdatedHandler
 	eventHandlers               map[uint64]OnEventHandler
+
+	// maximum time we allow watches to run before relisting the group/kind and restarting the watch
+	watchResyncTimeout time.Duration
 }
 
 // OnResourceUpdated register event handler that is executed every time when resource get's updated in the cache
@@ -405,6 +409,9 @@ func (c *clusterCache) watchEvents(ctx context.Context, api kube.APIResourceInfo
 
 		// load API initial state if no resource version provided
 		if resourceVersion == "" {
+			var writeT time.Duration
+			var listAndWriteCacheDuration time.Duration
+			listSt := time.Now()
 			resourceVersion, err = c.listResources(ctx, resClient, func(listPager *pager.ListPager) error {
 				var items []unstructured.Unstructured
 				err := listPager.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
@@ -421,16 +428,24 @@ func (c *clusterCache) watchEvents(ctx context.Context, api kube.APIResourceInfo
 				}
 
 				return runSynced(&c.lock, func() error {
+					writeCacheSt := time.Now()
+					defer func() {
+						writeT += time.Since(writeCacheSt)
+					}()
 					c.replaceResourceCache(api.GroupKind, items, ns)
 					return nil
 				})
 			})
 
+			listAndWriteCacheDuration = time.Since(listSt)
+			listT := listAndWriteCacheDuration - writeT
+			c.log.Debugf("watchEvents: listed %d %s in %v (list: %v, write: %v)", len(c.resources), api.GroupKind, listAndWriteCacheDuration, listT, writeT)
 			if err != nil {
 				return err
 			}
 		}
 
+		c.log.Debugf(fmt.Sprintf("watchEvents: start resync watch %s on %s", api.GroupKind, c.config.Host))
 		w, err := watchutil.NewRetryWatcher(resourceVersion, &cache.ListWatch{
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				res, err := resClient.Watch(ctx, options)
@@ -446,7 +461,12 @@ func (c *clusterCache) watchEvents(ctx context.Context, api kube.APIResourceInfo
 			resourceVersion = ""
 		}()
 
-		shouldResync := time.After(watchResyncTimeout)
+		var watchResyncTimeoutCh <-chan time.Time
+		if c.watchResyncTimeout > 0 {
+			shouldResync := time.NewTimer(c.watchResyncTimeout)
+			defer shouldResync.Stop()
+			watchResyncTimeoutCh = shouldResync.C
+		}
 
 		for {
 			select {
@@ -455,8 +475,8 @@ func (c *clusterCache) watchEvents(ctx context.Context, api kube.APIResourceInfo
 				return nil
 
 			// re-synchronize API state and restart watch periodically
-			case <-shouldResync:
-				return fmt.Errorf("Resyncing %s on %s during to timeout", api.GroupKind, c.config.Host)
+			case <-watchResyncTimeoutCh:
+				return fmt.Errorf("Resyncing %s on %s during to %v timeout", api.GroupKind, c.config.Host, c.watchResyncTimeout)
 
 			// re-synchronize API state and restart watch if retry watcher failed to continue watching using provided resource version
 			case <-w.Done():
@@ -472,7 +492,9 @@ func (c *clusterCache) watchEvents(ctx context.Context, api kube.APIResourceInfo
 					return fmt.Errorf("Failed to convert to *unstructured.Unstructured: %v", event.Object)
 				}
 
+				c.log.Debugf(fmt.Sprintf("watchEvents: watched %s, %s on %s", obj.GetName(), event.Type, c.config.Host))
 				c.processEvent(event.Type, obj)
+				c.log.Debugf(fmt.Sprintf("watchEvents: watched %s, %s on %s finished", obj.GetName(), event.Type, c.config.Host))
 				if kube.IsCRD(obj) {
 					if event.Type == watch.Deleted {
 						group, groupOk, groupErr := unstructured.NestedString(obj.Object, "spec", "group")
@@ -556,6 +578,9 @@ func (c *clusterCache) sync() error {
 		c.namespacedResources[api.GroupKind] = api.Meta.Namespaced
 		lock.Unlock()
 
+		var writeT time.Duration
+		var listAndWriteCacheDuration time.Duration
+		listSt := time.Now()
 		return c.processApi(client, api, func(resClient dynamic.ResourceInterface, ns string) error {
 			resourceVersion, err := c.listResources(ctx, resClient, func(listPager *pager.ListPager) error {
 				return listPager.EachListItem(context.Background(), metav1.ListOptions{}, func(obj runtime.Object) error {
@@ -563,12 +588,18 @@ func (c *clusterCache) sync() error {
 						return fmt.Errorf("object %s/%s has an unexpected type", un.GroupVersionKind().String(), un.GetName())
 					} else {
 						lock.Lock()
+						writeCacheSt := time.Now()
 						c.setNode(c.newResource(un))
+						writeT += time.Since(writeCacheSt)
 						lock.Unlock()
 					}
 					return nil
 				})
 			})
+			listAndWriteCacheDuration = time.Since(listSt)
+			listT := listAndWriteCacheDuration - writeT
+			c.log.Debugf("watchEvents: listed %d %s in %v (list: %v, write: %v)", len(c.resources), api.GroupKind, listAndWriteCacheDuration, listT, writeT)
+
 			if err != nil {
 				return fmt.Errorf("failed to load initial state of resource %s: %v", api.GroupKind.String(), err)
 			}
