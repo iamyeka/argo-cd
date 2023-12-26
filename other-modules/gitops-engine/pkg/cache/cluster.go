@@ -412,8 +412,8 @@ func (c *clusterCache) watchEvents(ctx context.Context, api kube.APIResourceInfo
 			var writeT time.Duration
 			var listAndWriteCacheDuration time.Duration
 			listSt := time.Now()
+			var items []unstructured.Unstructured
 			resourceVersion, err = c.listResources(ctx, resClient, func(listPager *pager.ListPager) error {
-				var items []unstructured.Unstructured
 				err := listPager.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
 					if un, ok := obj.(*unstructured.Unstructured); !ok {
 						return fmt.Errorf("object %s/%s has an unexpected type", un.GroupVersionKind().String(), un.GetName())
@@ -427,22 +427,22 @@ func (c *clusterCache) watchEvents(ctx context.Context, api kube.APIResourceInfo
 					return fmt.Errorf("failed to load initial state of resource %s: %v", api.GroupKind.String(), err)
 				}
 
-				return runSynced(&c.lock, func() error {
-					writeCacheSt := time.Now()
-					defer func() {
-						writeT += time.Since(writeCacheSt)
-					}()
-					c.replaceResourceCache(api.GroupKind, items, ns)
-					return nil
-				})
+				return nil
 			})
+
+			if err != nil {
+				return err
+			}
+
+			c.lock.Lock()
+			writeCacheSt := time.Now()
+			c.replaceResourceCache(api.GroupKind, items, ns)
+			writeT += time.Since(writeCacheSt)
+			c.lock.Unlock()
 
 			listAndWriteCacheDuration = time.Since(listSt)
 			listT := listAndWriteCacheDuration - writeT
 			c.log.Debugf("watchEvents: listed %d %s in %v (list: %v, write: %v)", len(c.resources), api.GroupKind, listAndWriteCacheDuration, listT, writeT)
-			if err != nil {
-				return err
-			}
 		}
 
 		c.log.Debugf(fmt.Sprintf("watchEvents: start resync watch %s on %s", api.GroupKind, c.config.Host))
