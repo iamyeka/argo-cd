@@ -442,7 +442,7 @@ func (c *clusterCache) watchEvents(ctx context.Context, api kube.APIResourceInfo
 
 			listAndWriteCacheDuration = time.Since(listSt)
 			listT := listAndWriteCacheDuration - writeT
-			c.log.Debugf("watchEvents: listed %d %s in %v (list: %v, write: %v)", len(c.resources), api.GroupKind, listAndWriteCacheDuration, listT, writeT)
+			c.log.Debugf("watchEvents: listed %d %s in %v (list: %v, write: %v)", len(items), api.GroupKind, listAndWriteCacheDuration, listT, writeT)
 		}
 
 		c.log.Debugf(fmt.Sprintf("watchEvents: start resync watch %s on %s", api.GroupKind, c.config.Host))
@@ -495,8 +495,8 @@ func (c *clusterCache) watchEvents(ctx context.Context, api kube.APIResourceInfo
 				st2 := time.Now()
 				c.log.Debugf(fmt.Sprintf("watchEvents: watched %s, %s on %s", obj.GetName(), event.Type, c.config.Host))
 				c.processEvent(event.Type, obj)
-				c.log.Debugf(fmt.Sprintf("watchEvents: watched %s %s, %s on %s finished, cost %v, left %d in channel",
-					obj.GetObjectKind().GroupVersionKind(), obj.GetName(), event.Type, c.config.Host, time.Since(st2), len(w.ResultChan())))
+				c.log.Debugf(fmt.Sprintf("watchEvents: watched %s %s, %s on %s finished, cost %v",
+					obj.GetObjectKind().GroupVersionKind(), obj.GetName(), event.Type, c.config.Host, time.Since(st2)))
 				if kube.IsCRD(obj) {
 					if event.Type == watch.Deleted {
 						group, groupOk, groupErr := unstructured.NestedString(obj.Object, "spec", "group")
