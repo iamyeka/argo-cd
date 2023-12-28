@@ -967,6 +967,7 @@ func (ctrl *ApplicationController) processAppRefreshQueueItem() (processNext boo
 		processNext = false
 		return
 	}
+	log.Debugf("length of appRefreshQueue: %d", ctrl.appRefreshQueue.Len())
 	processNext = true
 	defer func() {
 		if r := recover(); r != nil {

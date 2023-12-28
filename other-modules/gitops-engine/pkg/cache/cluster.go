@@ -600,7 +600,7 @@ func (c *clusterCache) sync() error {
 			})
 			listAndWriteCacheDuration = time.Since(listSt)
 			listT := listAndWriteCacheDuration - writeT
-			c.log.Debugf("watchEvents: listed %d %s in %v (list: %v, write: %v)", len(c.resources), api.GroupKind, listAndWriteCacheDuration, listT, writeT)
+			c.log.Debugf("watchEvents: listed %s in %v (list: %v, write: %v)", api.GroupKind, listAndWriteCacheDuration, listT, writeT)
 
 			if err != nil {
 				return fmt.Errorf("failed to load initial state of resource %s: %v", api.GroupKind.String(), err)
@@ -662,7 +662,7 @@ func (c *clusterCache) IterateHierarchy(key kube.ResourceKey, action func(resour
 
 	st := time.Now()
 	defer func() {
-		log.Debugf("iterate resource tree of %s in %v", key, time.Since(st))
+		c.log.Debugf("iterate resource tree of %s in %v", key, time.Since(st))
 	}()
 
 	if res, ok := c.resources[key]; ok {
