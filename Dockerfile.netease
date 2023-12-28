@@ -16,12 +16,6 @@ COPY . .
 RUN go mod download
 RUN make controller
 
-ARG BUILD_ALL_CLIS=true
-RUN if [ "$BUILD_ALL_CLIS" = "true" ] ; then \
-    make CLI_NAME=argocd-darwin-amd64 GOOS=darwin cli-local && \
-    make CLI_NAME=argocd-windows-amd64.exe GOOS=windows cli-local \
-    ; fi
-
 ####################################################################################################
 # Final image
 ####################################################################################################

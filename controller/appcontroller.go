@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	_ "net/http/pprof"
 	"reflect"
 	"runtime/debug"
 	"sort"
