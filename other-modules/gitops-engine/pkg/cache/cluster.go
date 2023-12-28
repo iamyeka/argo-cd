@@ -662,7 +662,7 @@ func (c *clusterCache) IterateHierarchy(key kube.ResourceKey, action func(resour
 
 	st := time.Now()
 	defer func() {
-		c.log.Debugf("iterate resource tree of %s in %v", key, time.Since(st))
+		c.log.Debugf("IterateHierarchy in lock: iterate resource tree of %s in %v", key, time.Since(st))
 	}()
 
 	if res, ok := c.resources[key]; ok {
@@ -778,6 +778,7 @@ func (c *clusterCache) GetManagedLiveObjs(targetObjs []*unstructured.Unstructure
 }
 
 func (c *clusterCache) processEvent(event watch.EventType, un *unstructured.Unstructured) {
+	st1 := time.Now()
 	for _, h := range c.getEventHandlers() {
 		h(event, un)
 	}
@@ -785,9 +786,14 @@ func (c *clusterCache) processEvent(event watch.EventType, un *unstructured.Unst
 	if event == watch.Modified && skipAppRequeing(key) {
 		return
 	}
+	c.log.Debugf("processEvent out lock: %s %s, %s on %s finished, cost %v", un.GroupVersionKind(), un.GetName(), event, c.config.Host, time.Since(st1))
 
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
+	st2 := time.Now()
+	defer c.log.Debugf("processEvent in lock: %s %s, %s on %s finished, cost %v", un.GroupVersionKind(), un.GetName(), event, c.config.Host, time.Since(st2))
+
 	existingNode, exists := c.resources[key]
 	if event == watch.Deleted {
 		if exists {
