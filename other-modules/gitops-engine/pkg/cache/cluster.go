@@ -839,7 +839,14 @@ func (c *clusterCache) onNodeRemoved(key kube.ResourceKey) {
 
 var (
 	ignoredRefreshResources = map[string]bool{
-		"/" + kube.EndpointsKind: true,
+		"/" + kube.EndpointsKind:              true,
+		"autoscaling/HorizontalPodAutoscaler": true,
+		"networking.k8s.io/Ingress":           true,
+		"extensions/Ingress":                  true,
+		"network.netease.com/IpAllocation":    true,
+		"network.netease.com/IPRange":         true,
+		"network.netease.com/Subnet":          true,
+		"network.netease.com/IPPool":          true,
 	}
 )
 
