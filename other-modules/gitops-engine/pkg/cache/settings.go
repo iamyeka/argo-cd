@@ -112,3 +112,10 @@ func SetWatchResyncTimeout(timeout time.Duration) UpdateSettingsFunc {
 		cache.watchResyncTimeout = timeout
 	}
 }
+
+// SetWatchResyncTimeout updates cluster re-sync timeout
+func SetSkipSomeEvents(skipSomeEvents bool) UpdateSettingsFunc {
+	return func(cache *clusterCache) {
+		cache.enableSkipSomeEvents = skipSomeEvents
+	}
+}

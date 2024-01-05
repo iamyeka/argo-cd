@@ -167,7 +167,8 @@ type clusterCache struct {
 	eventHandlers               map[uint64]OnEventHandler
 
 	// maximum time we allow watches to run before relisting the group/kind and restarting the watch
-	watchResyncTimeout time.Duration
+	watchResyncTimeout   time.Duration
+	enableSkipSomeEvents bool
 }
 
 // OnResourceUpdated register event handler that is executed every time when resource get's updated in the cache
@@ -778,11 +779,15 @@ func (c *clusterCache) GetManagedLiveObjs(targetObjs []*unstructured.Unstructure
 }
 
 func (c *clusterCache) processEvent(event watch.EventType, un *unstructured.Unstructured) {
+	key := kube.GetResourceKey(un)
+	if c.enableSkipSomeEvents && skipResourceEvent(key, event) {
+		return
+	}
+
 	st1 := time.Now()
 	for _, h := range c.getEventHandlers() {
 		h(event, un)
 	}
-	key := kube.GetResourceKey(un)
 	if event == watch.Modified && skipAppRequeing(key) {
 		return
 	}
@@ -839,14 +844,31 @@ func (c *clusterCache) onNodeRemoved(key kube.ResourceKey) {
 
 var (
 	ignoredRefreshResources = map[string]bool{
-		"/" + kube.EndpointsKind:              true,
-		"autoscaling/HorizontalPodAutoscaler": true,
-		"networking.k8s.io/Ingress":           true,
-		"extensions/Ingress":                  true,
-		"network.netease.com/IpAllocation":    true,
-		"network.netease.com/IPRange":         true,
-		"network.netease.com/Subnet":          true,
-		"network.netease.com/IPPool":          true,
+		"/" + kube.EndpointsKind: true,
+	}
+
+	ignoredResourcesEvents = map[watch.EventType]map[string]bool{
+		watch.Added: {
+			"network.netease.com/IpAllocation": true,
+			"network.netease.com/IPRange":      true,
+			"network.netease.com/Subnet":       true,
+			"network.netease.com/IPPool":       true,
+		},
+		watch.Deleted: {
+			"network.netease.com/IpAllocation": true,
+			"network.netease.com/IPRange":      true,
+			"network.netease.com/Subnet":       true,
+			"network.netease.com/IPPool":       true,
+		},
+		watch.Modified: {
+			"network.netease.com/IpAllocation":    true,
+			"network.netease.com/IPRange":         true,
+			"network.netease.com/Subnet":          true,
+			"network.netease.com/IPPool":          true,
+			"autoscaling/HorizontalPodAutoscaler": true,
+			"networking.k8s.io/Ingress":           true,
+			"extensions/Ingress":                  true,
+		},
 	}
 )
 
@@ -868,4 +890,13 @@ func (c *clusterCache) GetClusterInfo() ClusterInfo {
 // We ignore API types which have a high churn rate, and/or whose updates are irrelevant to the app
 func skipAppRequeing(key kube.ResourceKey) bool {
 	return ignoredRefreshResources[key.Group+"/"+key.Kind]
+}
+
+// skipResourceEvent check if the object is an API type and action which we want to skip process.
+func skipResourceEvent(key kube.ResourceKey, eventType watch.EventType) bool {
+	if _, ok := ignoredResourcesEvents[eventType][key.Group+"/"+key.Kind]; !ok {
+		return false
+	}
+
+	return ignoredResourcesEvents[eventType][key.Group+"/"+key.Kind]
 }

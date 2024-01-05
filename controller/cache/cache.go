@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"reflect"
+	"strconv"
 	"sync"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 const (
 	// EnvClusterCacheWatchResyncDuration is the env variable that holds cluster cache watch re-sync duration
 	EnvClusterCacheWatchResyncDuration = "ARGOCD_CLUSTER_CACHE_WATCH_RESYNC_DURATION"
+	EnvClusterCacheSkipSomeEvents      = "ARGOCD_CLUSTER_CACHE_SKIP_SOME_EVENTS"
 )
 
 // GitOps engine cluster cache tuning options
@@ -39,10 +41,12 @@ var (
 	// clusterCacheWatchResyncDuration controls the maximum duration that group/kind watches are allowed to run
 	// for before relisting & restarting the watch
 	clusterCacheWatchResyncDuration = 10 * time.Minute
+	clusterCacheSkipSomeEvents      = false
 )
 
 func init() {
 	clusterCacheWatchResyncDuration = ParseDurationFromEnv(EnvClusterCacheWatchResyncDuration, clusterCacheWatchResyncDuration, 0, math.MaxInt64)
+	clusterCacheSkipSomeEvents = ParseBoolFromEnv(EnvClusterCacheSkipSomeEvents, false)
 }
 
 type LiveStateCache interface {
@@ -263,6 +267,7 @@ func (c *liveStateCache) getCluster(server string) (clustercache.ClusterCache, e
 		clustercache.SetSettings(cacheSettings.clusterSettings),
 		clustercache.SetNamespaces(cluster.Namespaces),
 		clustercache.SetWatchResyncTimeout(clusterCacheWatchResyncDuration),
+		clustercache.SetSkipSomeEvents(clusterCacheSkipSomeEvents),
 		clustercache.SetPopulateResourceInfoHandler(func(un *unstructured.Unstructured, isRoot bool) (interface{}, bool) {
 			res := &ResourceInfo{}
 			populateNodeInfo(un, res)
@@ -550,4 +555,17 @@ func ParseDurationFromEnv(env string, defaultValue, min, max time.Duration) time
 		return defaultValue
 	}
 	return dur
+}
+
+func ParseBoolFromEnv(env string, defaultValue bool) bool {
+	str := os.Getenv(env)
+	if str == "" {
+		return defaultValue
+	}
+	b, err := strconv.ParseBool(str)
+	if err != nil {
+		log.Warnf("Could not parse '%s' as a boolean from environment %s", str, env)
+		return defaultValue
+	}
+	return b
 }
