@@ -561,3 +561,33 @@ func ExampleNewClusterCache_resourceUpdatedEvents() {
 	// observe resource modifications for 1 minute
 	time.Sleep(time.Minute)
 }
+
+func TestSkipResourceEvent(t *testing.T) {
+	noExistEventType := watch.EventType("no-exist")
+	PodRK := kube.ResourceKey{
+		Kind: "Pod",
+	}
+	ingressRK := kube.ResourceKey{
+		Group: "extensions",
+		Kind:  "Ingress",
+	}
+	noExistRK := kube.ResourceKey{
+		Group: "no-exist",
+		Kind:  "no-exist",
+	}
+	assert.Equal(t, skipResourceEvent(noExistRK, watch.Added), false)
+	assert.Equal(t, skipResourceEvent(noExistRK, watch.Modified), false)
+	assert.Equal(t, skipResourceEvent(noExistRK, watch.Deleted), false)
+	assert.Equal(t, skipResourceEvent(noExistRK, watch.Error), false)
+
+	assert.Equal(t, skipResourceEvent(PodRK, watch.Added), false)
+	assert.Equal(t, skipResourceEvent(PodRK, watch.Modified), false)
+	assert.Equal(t, skipResourceEvent(PodRK, watch.Deleted), false)
+
+	assert.Equal(t, skipResourceEvent(ingressRK, watch.Added), false)
+	assert.Equal(t, skipResourceEvent(ingressRK, watch.Modified), true)
+	assert.Equal(t, skipResourceEvent(ingressRK, watch.Deleted), false)
+
+	assert.Equal(t, skipResourceEvent(PodRK, noExistEventType), false)
+	assert.Equal(t, skipResourceEvent(ingressRK, noExistEventType), false)
+}

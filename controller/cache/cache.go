@@ -2,8 +2,12 @@ package cache
 
 import (
 	"context"
+	"math"
+	"os"
 	"reflect"
+	"strconv"
 	"sync"
+	"time"
 
 	clustercache "github.com/argoproj/gitops-engine/pkg/cache"
 	"github.com/argoproj/gitops-engine/pkg/health"
@@ -25,6 +29,25 @@ import (
 	"github.com/argoproj/argo-cd/util/lua"
 	"github.com/argoproj/argo-cd/util/settings"
 )
+
+const (
+	// EnvClusterCacheWatchResyncDuration is the env variable that holds cluster cache watch re-sync duration
+	EnvClusterCacheWatchResyncDuration = "ARGOCD_CLUSTER_CACHE_WATCH_RESYNC_DURATION"
+	EnvClusterCacheSkipSomeEvents      = "ARGOCD_CLUSTER_CACHE_SKIP_SOME_EVENTS"
+)
+
+// GitOps engine cluster cache tuning options
+var (
+	// clusterCacheWatchResyncDuration controls the maximum duration that group/kind watches are allowed to run
+	// for before relisting & restarting the watch
+	clusterCacheWatchResyncDuration = 10 * time.Minute
+	clusterCacheSkipSomeEvents      = false
+)
+
+func init() {
+	clusterCacheWatchResyncDuration = ParseDurationFromEnv(EnvClusterCacheWatchResyncDuration, clusterCacheWatchResyncDuration, 0, math.MaxInt64)
+	clusterCacheSkipSomeEvents = ParseBoolFromEnv(EnvClusterCacheSkipSomeEvents, false)
+}
 
 type LiveStateCache interface {
 	// Returns k8s server version
@@ -243,6 +266,8 @@ func (c *liveStateCache) getCluster(server string) (clustercache.ClusterCache, e
 		clustercache.SetResyncTimeout(common.K8SClusterResyncDuration),
 		clustercache.SetSettings(cacheSettings.clusterSettings),
 		clustercache.SetNamespaces(cluster.Namespaces),
+		clustercache.SetWatchResyncTimeout(clusterCacheWatchResyncDuration),
+		clustercache.SetSkipSomeEvents(clusterCacheSkipSomeEvents),
 		clustercache.SetPopulateResourceInfoHandler(func(un *unstructured.Unstructured, isRoot bool) (interface{}, bool) {
 			res := &ResourceInfo{}
 			populateNodeInfo(un, res)
@@ -508,4 +533,39 @@ func (c *liveStateCache) GetClustersInfo() []clustercache.ClusterInfo {
 
 func (c *liveStateCache) GetClusterCache(server string) (clustercache.ClusterCache, error) {
 	return c.getSyncedCluster(server)
+}
+
+func ParseDurationFromEnv(env string, defaultValue, min, max time.Duration) time.Duration {
+	str := os.Getenv(env)
+	if str == "" {
+		return defaultValue
+	}
+	dur, err := time.ParseDuration(str)
+	if err != nil {
+		log.Warnf("Could not parse '%s' as a duration string from environment %s", str, env)
+		return defaultValue
+	}
+
+	if dur < min {
+		log.Warnf("Value in %s is %s, which is less than minimum %s allowed", env, dur, min)
+		return defaultValue
+	}
+	if dur > max {
+		log.Warnf("Value in %s is %s, which is greater than maximum %s allowed", env, dur, max)
+		return defaultValue
+	}
+	return dur
+}
+
+func ParseBoolFromEnv(env string, defaultValue bool) bool {
+	str := os.Getenv(env)
+	if str == "" {
+		return defaultValue
+	}
+	b, err := strconv.ParseBool(str)
+	if err != nil {
+		log.Warnf("Could not parse '%s' as a boolean from environment %s", str, env)
+		return defaultValue
+	}
+	return b
 }
