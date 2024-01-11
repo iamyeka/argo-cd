@@ -34,6 +34,7 @@ const (
 	// EnvClusterCacheWatchResyncDuration is the env variable that holds cluster cache watch re-sync duration
 	EnvClusterCacheWatchResyncDuration = "ARGOCD_CLUSTER_CACHE_WATCH_RESYNC_DURATION"
 	EnvClusterCacheSkipSomeEvents      = "ARGOCD_CLUSTER_CACHE_SKIP_SOME_EVENTS"
+	EnvClusterCacheSkipSomeRefreshes   = "ARGOCD_CLUSTER_CACHE_SKIP_SOME_REFRESHES"
 )
 
 // GitOps engine cluster cache tuning options
@@ -42,11 +43,13 @@ var (
 	// for before relisting & restarting the watch
 	clusterCacheWatchResyncDuration = 10 * time.Minute
 	clusterCacheSkipSomeEvents      = false
+	clusterCacheSkipSomeRefreshes   = false
 )
 
 func init() {
 	clusterCacheWatchResyncDuration = ParseDurationFromEnv(EnvClusterCacheWatchResyncDuration, clusterCacheWatchResyncDuration, 0, math.MaxInt64)
 	clusterCacheSkipSomeEvents = ParseBoolFromEnv(EnvClusterCacheSkipSomeEvents, false)
+	clusterCacheSkipSomeRefreshes = ParseBoolFromEnv(EnvClusterCacheSkipSomeRefreshes, false)
 }
 
 type LiveStateCache interface {
@@ -230,12 +233,31 @@ var (
 	ignoredRefreshResources = map[string]bool{
 		"/" + kube.EndpointsKind: true,
 	}
+
+	ignoredRefreshWhenResourcesUpdates = map[string]bool{
+		"apps/Deployment":    true,
+		"/ResourceQuota":     true,
+		"apps/ReplicaSet":    true,
+		"/ConfigMap":         true,
+		"apps/PodAutoscaler": true,
+		"autoscaling.internal.knative.dev/PodAutoscaler": true,
+		"discovery.k8s.io/EndpointSlice":                 true,
+	}
 )
 
 // skipAppRequeuing checks if the object is an API type which we want to skip requeuing against.
 // We ignore API types which have a high churn rate, and/or whose updates are irrelevant to the app
 func skipAppRequeuing(key kube.ResourceKey) bool {
 	return ignoredRefreshResources[key.Group+"/"+key.Kind]
+}
+
+// skipRefresh check if the object is an API type and action which we want to skip process.
+func skipRefresh(key kube.ResourceKey) bool {
+	if _, ok := ignoredRefreshWhenResourcesUpdates[key.Group+"/"+key.Kind]; !ok {
+		return false
+	}
+
+	return ignoredRefreshWhenResourcesUpdates[key.Group+"/"+key.Kind]
 }
 
 func (c *liveStateCache) getCluster(server string) (clustercache.ClusterCache, error) {
@@ -297,6 +319,13 @@ func (c *liveStateCache) getCluster(server string) (clustercache.ClusterCache, e
 			}
 			app := getApp(r, namespaceResources)
 			if app == "" || skipAppRequeuing(r.ResourceKey()) {
+				continue
+			}
+			if clusterCacheSkipSomeRefreshes &&
+				oldRes != nil &&
+				newRes != nil &&
+				skipRefresh(r.ResourceKey()) {
+				log.Debugf("Skipping refresh for %s/%s/%s/%s", r.Ref.GroupVersionKind(), r.Ref.Namespace, r.Ref.Name, r.Ref.UID)
 				continue
 			}
 			toNotify[app] = isRootAppNode(r) || toNotify[app]
