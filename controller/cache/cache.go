@@ -235,7 +235,6 @@ var (
 	}
 
 	ignoredRefreshWhenResourcesUpdates = map[string]bool{
-		"apps/Deployment":    true,
 		"/ResourceQuota":     true,
 		"apps/ReplicaSet":    true,
 		"/ConfigMap":         true,
