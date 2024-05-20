@@ -7,11 +7,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/argoproj/gitops-engine/pkg/health"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/labels"
+
+	"github.com/argoproj/gitops-engine/pkg/health"
 
 	argoappv1 "github.com/argoproj/argo-cd/pkg/apis/application/v1alpha1"
 	applister "github.com/argoproj/argo-cd/pkg/client/listers/application/v1alpha1"
@@ -21,15 +22,17 @@ import (
 
 type MetricsServer struct {
 	*http.Server
-	syncCounter             *prometheus.CounterVec
-	kubectlExecCounter      *prometheus.CounterVec
-	kubectlExecPendingGauge *prometheus.GaugeVec
-	k8sRequestCounter       *prometheus.CounterVec
-	clusterEventsCounter    *prometheus.CounterVec
-	redisRequestCounter     *prometheus.CounterVec
-	reconcileHistogram      *prometheus.HistogramVec
-	redisRequestHistogram   *prometheus.HistogramVec
-	registry                *prometheus.Registry
+	syncCounter              *prometheus.CounterVec
+	kubectlExecCounter       *prometheus.CounterVec
+	kubectlExecPendingGauge  *prometheus.GaugeVec
+	k8sRequestCounter        *prometheus.CounterVec
+	clusterEventsCounter     *prometheus.CounterVec
+	redisRequestCounter      *prometheus.CounterVec
+	reconcileHistogram       *prometheus.HistogramVec
+	redisRequestHistogram    *prometheus.HistogramVec
+	registry                 *prometheus.Registry
+	resourceTreeWaitingGauge *prometheus.GaugeVec
+	resourceTreeRunningGauge *prometheus.GaugeVec
 }
 
 const (
@@ -129,6 +132,14 @@ var (
 		},
 		[]string{"initiator"},
 	)
+	reconcileWaitingTimeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "reconcile_waiting_time",
+		Help: "time spent waiting for get lock for getting resource tree, the unit is nanosecond",
+	}, []string{"application_name"})
+	reconcileRunningTimeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "reconcile_running_time",
+		Help: "time spent running for getting resource tree, the unit is nanosecond",
+	}, []string{"application_name"})
 )
 
 // NewMetricsServer returns a new prometheus server which collects application metrics
@@ -151,6 +162,8 @@ func NewMetricsServer(addr string, appLister applister.ApplicationLister, health
 	registry.MustRegister(clusterEventsCounter)
 	registry.MustRegister(redisRequestCounter)
 	registry.MustRegister(redisRequestHistogram)
+	registry.MustRegister(reconcileWaitingTimeGauge)
+	registry.MustRegister(reconcileRunningTimeGauge)
 
 	return &MetricsServer{
 		registry: registry,
@@ -158,14 +171,16 @@ func NewMetricsServer(addr string, appLister applister.ApplicationLister, health
 			Addr:    addr,
 			Handler: mux,
 		},
-		syncCounter:             syncCounter,
-		k8sRequestCounter:       k8sRequestCounter,
-		kubectlExecCounter:      kubectlExecCounter,
-		kubectlExecPendingGauge: kubectlExecPendingGauge,
-		reconcileHistogram:      reconcileHistogram,
-		clusterEventsCounter:    clusterEventsCounter,
-		redisRequestCounter:     redisRequestCounter,
-		redisRequestHistogram:   redisRequestHistogram,
+		syncCounter:              syncCounter,
+		k8sRequestCounter:        k8sRequestCounter,
+		kubectlExecCounter:       kubectlExecCounter,
+		kubectlExecPendingGauge:  kubectlExecPendingGauge,
+		reconcileHistogram:       reconcileHistogram,
+		clusterEventsCounter:     clusterEventsCounter,
+		redisRequestCounter:      redisRequestCounter,
+		redisRequestHistogram:    redisRequestHistogram,
+		resourceTreeWaitingGauge: reconcileWaitingTimeGauge,
+		resourceTreeRunningGauge: reconcileRunningTimeGauge,
 	}
 }
 
@@ -193,6 +208,14 @@ func (m *MetricsServer) IncKubectlExecPending(command string) {
 
 func (m *MetricsServer) DecKubectlExecPending(command string) {
 	m.kubectlExecPendingGauge.WithLabelValues(command).Dec()
+}
+
+func (m *MetricsServer) SetResourceTreeWaitingTime(applicationName string, duration int64) {
+	m.resourceTreeWaitingGauge.WithLabelValues(applicationName).Set(float64(duration))
+}
+
+func (m *MetricsServer) SetResourceTreeRunningTime(applicationName string, duration int64) {
+	m.resourceTreeRunningGauge.WithLabelValues(applicationName).Set(float64(duration))
 }
 
 // IncClusterEventsCount increments the number of cluster events
