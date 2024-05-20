@@ -135,11 +135,11 @@ var (
 	reconcileWaitingTimeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "reconcile_waiting_time",
 		Help: "time spent waiting for get lock for getting resource tree, the unit is nanosecond",
-	}, append(descAppDefaultLabels, "dest_server", "cluster_name"))
+	}, append(descAppDefaultLabels, "dest_server"))
 	reconcileRunningTimeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "reconcile_running_time",
 		Help: "time spent running for getting resource tree, the unit is nanosecond",
-	}, append(descAppDefaultLabels, "dest_server", "cluster_name"))
+	}, append(descAppDefaultLabels, "dest_server"))
 )
 
 // NewMetricsServer returns a new prometheus server which collects application metrics
@@ -210,12 +210,12 @@ func (m *MetricsServer) DecKubectlExecPending(command string) {
 	m.kubectlExecPendingGauge.WithLabelValues(command).Dec()
 }
 
-func (m *MetricsServer) SetResourceTreeWaitingTime(app *argoappv1.Application, cluster string, duration int64) {
-	m.resourceTreeWaitingGauge.WithLabelValues(app.Namespace, app.Name, app.Spec.GetProject(), app.Spec.Destination.Server, cluster).Set(float64(duration))
+func (m *MetricsServer) SetResourceTreeWaitingTime(app *argoappv1.Application, duration int64) {
+	m.resourceTreeWaitingGauge.WithLabelValues(app.Namespace, app.Name, app.Spec.GetProject(), app.Spec.Destination.Server).Set(float64(duration))
 }
 
-func (m *MetricsServer) SetResourceTreeRunningTime(app *argoappv1.Application, cluster string, duration int64) {
-	m.resourceTreeRunningGauge.WithLabelValues(app.Namespace, app.Name, app.Spec.GetProject(), app.Spec.Destination.Server, cluster).Set(float64(duration))
+func (m *MetricsServer) SetResourceTreeRunningTime(app *argoappv1.Application, duration int64) {
+	m.resourceTreeRunningGauge.WithLabelValues(app.Namespace, app.Name, app.Spec.GetProject(), app.Spec.Destination.Server).Set(float64(duration))
 }
 
 // IncClusterEventsCount increments the number of cluster events
