@@ -133,11 +133,11 @@ var (
 		[]string{"initiator"},
 	)
 	reconcileWaitingTimeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "reconcile_waiting_time",
+		Name: "argocd_reconcile_waiting_time",
 		Help: "time spent waiting for get lock for getting resource tree, the unit is nanosecond",
 	}, append(descAppDefaultLabels, "dest_server"))
 	reconcileRunningTimeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "reconcile_running_time",
+		Name: "argocd_reconcile_running_time",
 		Help: "time spent running for getting resource tree, the unit is nanosecond",
 	}, append(descAppDefaultLabels, "dest_server"))
 )
