@@ -87,7 +87,8 @@ type ClusterCache interface {
 	// GetNamespaceTopLevelResources returns top level resources in the specified namespace
 	GetNamespaceTopLevelResources(namespace string) map[kube.ResourceKey]*Resource
 	// IterateHierarchy iterates resource tree starting from the specified top level resource and executes callback for each resource in the tree
-	IterateHierarchy(key kube.ResourceKey, action func(resource *Resource, namespaceResources map[kube.ResourceKey]*Resource))
+	// The function returns time spent waiting for the lock and time spent in the lock
+	IterateHierarchy(key kube.ResourceKey, action func(resource *Resource, namespaceResources map[kube.ResourceKey]*Resource)) (time.Duration, time.Duration)
 	// IsNamespaced answers if specified group/kind is a namespaced resource API or not
 	IsNamespaced(gk schema.GroupKind) (bool, error)
 	// GetManagedLiveObjs helps finding matching live K8S resources for a given resources list.
@@ -657,9 +658,11 @@ func (c *clusterCache) GetNamespaceTopLevelResources(namespace string) map[kube.
 }
 
 // IterateHierarchy iterates resource tree starting from the specified top level resource and executes callback for each resource in the tree
-func (c *clusterCache) IterateHierarchy(key kube.ResourceKey, action func(resource *Resource, namespaceResources map[kube.ResourceKey]*Resource)) {
+func (c *clusterCache) IterateHierarchy(key kube.ResourceKey, action func(resource *Resource, namespaceResources map[kube.ResourceKey]*Resource)) (time.Duration, time.Duration) {
+	startToWait := time.Now()
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+	watingTime := time.Since(startToWait)
 
 	st := time.Now()
 	defer func() {
@@ -691,6 +694,7 @@ func (c *clusterCache) IterateHierarchy(key kube.ResourceKey, action func(resour
 			}
 		}
 	}
+	return watingTime, time.Since(st)
 }
 
 // IsNamespaced answers if specified group/kind is a namespaced resource API or not
