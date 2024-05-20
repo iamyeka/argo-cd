@@ -341,10 +341,12 @@ func (ctrl *ApplicationController) getResourceTree(a *appv1.Application, managed
 			waitingTime, runningTime, err := ctrl.stateCache.IterateHierarchy(a.Spec.Destination.Server, kube.GetResourceKey(live), func(child appv1.ResourceNode, appName string) {
 				nodes = append(nodes, child)
 			})
+
 			if err != nil {
+				return nil, err
+			}else {
 				ctrl.metricsServer.SetResourceTreeWaitingTime(a.Name, waitingTime.Nanoseconds())
 				ctrl.metricsServer.SetResourceTreeRunningTime(a.Name, runningTime.Nanoseconds())
-				return nil, err
 			}
 		}
 	}
@@ -363,9 +365,10 @@ func (ctrl *ApplicationController) getResourceTree(a *appv1.Application, managed
 				}
 			})
 			if err != nil {
+				return nil, err
+			}else {
 				ctrl.metricsServer.SetResourceTreeWaitingTime(a.Name, waitingTime.Nanoseconds())
 				ctrl.metricsServer.SetResourceTreeRunningTime(a.Name, runningTime.Nanoseconds())
-				return nil, err
 			}
 		}
 	}
