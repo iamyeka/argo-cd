@@ -149,10 +149,14 @@ var (
 				100.0 * float64(time.Nanosecond) / float64(time.Second),
 				200.0 * float64(time.Nanosecond) / float64(time.Second),
 				500.0 * float64(time.Nanosecond) / float64(time.Second),
-				1000.0 * float64(time.Nanosecond) / float64(time.Second),
-				5000.0 * float64(time.Nanosecond) / float64(time.Second),
-				10000.0 * float64(time.Nanosecond) / float64(time.Second),
-				100000.0 * float64(time.Nanosecond) / float64(time.Second)},
+				1.0 * float64(time.Microsecond) / float64(time.Second),
+				5.0 * float64(time.Microsecond) / float64(time.Second),
+				1.0 * float64(time.Millisecond) / float64(time.Second),
+				100.0 * float64(time.Millisecond) / float64(time.Second),
+				1.0,
+				10.0,
+				50.0,
+			},
 		}, append(descAppDefaultLabels, "dest_server"))
 )
 
