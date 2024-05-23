@@ -22,17 +22,17 @@ import (
 
 type MetricsServer struct {
 	*http.Server
-	syncCounter              *prometheus.CounterVec
-	kubectlExecCounter       *prometheus.CounterVec
-	kubectlExecPendingGauge  *prometheus.GaugeVec
-	k8sRequestCounter        *prometheus.CounterVec
-	clusterEventsCounter     *prometheus.CounterVec
-	redisRequestCounter      *prometheus.CounterVec
-	reconcileHistogram       *prometheus.HistogramVec
-	redisRequestHistogram    *prometheus.HistogramVec
-	registry                 *prometheus.Registry
-	resourceTreeWaitingGauge *prometheus.GaugeVec
-	resourceTreeRunningGauge *prometheus.GaugeVec
+	syncCounter                *prometheus.CounterVec
+	kubectlExecCounter         *prometheus.CounterVec
+	kubectlExecPendingGauge    *prometheus.GaugeVec
+	k8sRequestCounter          *prometheus.CounterVec
+	clusterEventsCounter       *prometheus.CounterVec
+	redisRequestCounter        *prometheus.CounterVec
+	reconcileHistogram         *prometheus.HistogramVec
+	redisRequestHistogram      *prometheus.HistogramVec
+	registry                   *prometheus.Registry
+	resourceTreeWaitingCounter *prometheus.CounterVec
+	resourceTreeRunningCounter *prometheus.CounterVec
 }
 
 const (
@@ -132,11 +132,11 @@ var (
 		},
 		[]string{"initiator"},
 	)
-	reconcileWaitingTimeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	reconcileWaitingTimeCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "argocd_reconcile_waiting_time",
 		Help: "time spent waiting for get lock for getting resource tree, the unit is nanosecond",
 	}, append(descAppDefaultLabels, "dest_server"))
-	reconcileRunningTimeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	reconcileRunningTimeCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "argocd_reconcile_running_time",
 		Help: "time spent running for getting resource tree, the unit is nanosecond",
 	}, append(descAppDefaultLabels, "dest_server"))
@@ -162,8 +162,8 @@ func NewMetricsServer(addr string, appLister applister.ApplicationLister, health
 	registry.MustRegister(clusterEventsCounter)
 	registry.MustRegister(redisRequestCounter)
 	registry.MustRegister(redisRequestHistogram)
-	registry.MustRegister(reconcileWaitingTimeGauge)
-	registry.MustRegister(reconcileRunningTimeGauge)
+	registry.MustRegister(reconcileWaitingTimeCounter)
+	registry.MustRegister(reconcileRunningTimeCounter)
 
 	return &MetricsServer{
 		registry: registry,
@@ -171,16 +171,16 @@ func NewMetricsServer(addr string, appLister applister.ApplicationLister, health
 			Addr:    addr,
 			Handler: mux,
 		},
-		syncCounter:              syncCounter,
-		k8sRequestCounter:        k8sRequestCounter,
-		kubectlExecCounter:       kubectlExecCounter,
-		kubectlExecPendingGauge:  kubectlExecPendingGauge,
-		reconcileHistogram:       reconcileHistogram,
-		clusterEventsCounter:     clusterEventsCounter,
-		redisRequestCounter:      redisRequestCounter,
-		redisRequestHistogram:    redisRequestHistogram,
-		resourceTreeWaitingGauge: reconcileWaitingTimeGauge,
-		resourceTreeRunningGauge: reconcileRunningTimeGauge,
+		syncCounter:                syncCounter,
+		k8sRequestCounter:          k8sRequestCounter,
+		kubectlExecCounter:         kubectlExecCounter,
+		kubectlExecPendingGauge:    kubectlExecPendingGauge,
+		reconcileHistogram:         reconcileHistogram,
+		clusterEventsCounter:       clusterEventsCounter,
+		redisRequestCounter:        redisRequestCounter,
+		redisRequestHistogram:      redisRequestHistogram,
+		resourceTreeWaitingCounter: reconcileWaitingTimeCounter,
+		resourceTreeRunningCounter: reconcileRunningTimeCounter,
 	}
 }
 
@@ -210,12 +210,12 @@ func (m *MetricsServer) DecKubectlExecPending(command string) {
 	m.kubectlExecPendingGauge.WithLabelValues(command).Dec()
 }
 
-func (m *MetricsServer) SetResourceTreeWaitingTime(app *argoappv1.Application, duration int64) {
-	m.resourceTreeWaitingGauge.WithLabelValues(app.Namespace, app.Name, app.Spec.GetProject(), app.Spec.Destination.Server).Set(float64(duration))
+func (m *MetricsServer) AddResourceTreeWaitingTime(app *argoappv1.Application, duration int64) {
+	m.resourceTreeWaitingCounter.WithLabelValues(app.Namespace, app.Name, app.Spec.GetProject(), app.Spec.Destination.Server).Add(float64(duration))
 }
 
-func (m *MetricsServer) SetResourceTreeRunningTime(app *argoappv1.Application, duration int64) {
-	m.resourceTreeRunningGauge.WithLabelValues(app.Namespace, app.Name, app.Spec.GetProject(), app.Spec.Destination.Server).Set(float64(duration))
+func (m *MetricsServer) AddResourceTreeRunningTime(app *argoappv1.Application, duration int64) {
+	m.resourceTreeRunningCounter.WithLabelValues(app.Namespace, app.Name, app.Spec.GetProject(), app.Spec.Destination.Server).Add(float64(duration))
 }
 
 // IncClusterEventsCount increments the number of cluster events
