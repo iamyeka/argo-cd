@@ -345,8 +345,9 @@ func (ctrl *ApplicationController) getResourceTree(a *appv1.Application, managed
 			if err != nil {
 				return nil, err
 			} else {
-				ctrl.metricsServer.AddResourceTreeWaitingTime(a, waitingTime.Nanoseconds())
-				ctrl.metricsServer.AddResourceTreeRunningTime(a, runningTime.Nanoseconds())
+				ctrl.metricsServer.ObserveResourceTreeWaitingTime(a, waitingTime)
+				ctrl.metricsServer.AddResourceTreeWaitingTime(a, waitingTime)
+				ctrl.metricsServer.AddResourceTreeRunningTime(a, runningTime)
 			}
 		}
 	}
@@ -367,8 +368,9 @@ func (ctrl *ApplicationController) getResourceTree(a *appv1.Application, managed
 			if err != nil {
 				return nil, err
 			} else {
-				ctrl.metricsServer.AddResourceTreeWaitingTime(a, waitingTime.Nanoseconds())
-				ctrl.metricsServer.AddResourceTreeRunningTime(a, runningTime.Nanoseconds())
+				ctrl.metricsServer.ObserveResourceTreeWaitingTime(a, waitingTime)
+				ctrl.metricsServer.AddResourceTreeWaitingTime(a, waitingTime)
+				ctrl.metricsServer.AddResourceTreeRunningTime(a, runningTime)
 			}
 		}
 	}
