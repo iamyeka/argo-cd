@@ -160,7 +160,7 @@ var (
 				1000.0,
 				3000.0,
 			},
-		}, append(descAppDefaultLabels, "dest_server"))
+		}, []string{"dest_server"})
 )
 
 // NewMetricsServer returns a new prometheus server which collects application metrics
@@ -271,7 +271,7 @@ func (m *MetricsServer) ObserveRedisRequestDuration(duration time.Duration) {
 }
 
 func (m *MetricsServer) ObserveResourceTreeWaitingTime(app *argoappv1.Application, duration time.Duration) {
-	m.resourceTreeWaitingHistogram.WithLabelValues(app.Namespace, app.Name, app.Spec.GetProject(), app.Spec.Destination.Server).Observe(duration.Seconds())
+	m.resourceTreeWaitingHistogram.WithLabelValues(app.Spec.Destination.Server).Observe(duration.Seconds())
 }
 
 // IncReconcile increments the reconcile counter for an application
