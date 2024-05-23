@@ -156,6 +156,9 @@ var (
 				1.0,
 				10.0,
 				50.0,
+				100.0,
+				1000.0,
+				3000.0,
 			},
 		}, append(descAppDefaultLabels, "dest_server"))
 )
