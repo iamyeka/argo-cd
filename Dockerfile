@@ -6,7 +6,7 @@ ARG BASE_IMAGE=debian:10-slim
 ####################################################################################################
 FROM golang:1.14.1 as builder
 
-RUN echo 'deb http://deb.debian.org/debian buster-backports main' >> /etc/apt/sources.list
+RUN echo 'deb http://archive.debian.org/debian buster-backports main' >> /etc/apt/sources.list
 
 RUN apt-get update && apt-get install -y \
     openssh-server \
@@ -41,7 +41,7 @@ FROM $BASE_IMAGE as argocd-base
 
 USER root
 
-RUN echo 'deb http://deb.debian.org/debian buster-backports main' >> /etc/apt/sources.list
+RUN echo 'deb http://archive.debian.org/debian buster-backports main' >> /etc/apt/sources.list
 
 RUN groupadd -g 999 argocd && \
     useradd -r -u 999 -g argocd argocd && \
