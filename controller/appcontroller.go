@@ -46,6 +46,7 @@ import (
 	appinformers "github.com/argoproj/argo-cd/pkg/client/informers/externalversions"
 	"github.com/argoproj/argo-cd/pkg/client/informers/externalversions/application/v1alpha1"
 	applisters "github.com/argoproj/argo-cd/pkg/client/listers/application/v1alpha1"
+	"github.com/argoproj/argo-cd/pkg/ratelimiter"
 	"github.com/argoproj/argo-cd/reposerver/apiclient"
 	"github.com/argoproj/argo-cd/util/argo"
 	appstatecache "github.com/argoproj/argo-cd/util/cache/appstate"
@@ -127,9 +128,14 @@ func NewApplicationController(
 	selfHealTimeout time.Duration,
 	metricsPort int,
 	kubectlParallelismLimit int64,
+	rateLimiterConfig *ratelimiter.AppControllerRateLimiterConfig,
 ) (*ApplicationController, error) {
 	log.Infof("appResyncPeriod=%v", appResyncPeriod)
 	db := db.NewDB(namespace, settingsMgr, kubeClientset)
+	if rateLimiterConfig == nil {
+		rateLimiterConfig = ratelimiter.GetDefaultAppRateLimiterConfig()
+		log.Info("Using default workqueue rate limiter config")
+	}
 	ctrl := ApplicationController{
 		cache:                         argoCache,
 		namespace:                     namespace,
@@ -137,7 +143,7 @@ func NewApplicationController(
 		kubectl:                       kubectl,
 		applicationClientset:          applicationClientset,
 		repoClientset:                 repoClientset,
-		appRefreshQueue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "app_reconciliation_queue"),
+		appRefreshQueue:               workqueue.NewNamedRateLimitingQueue(ratelimiter.NewCustomAppControllerRateLimiter(rateLimiterConfig), "app_reconciliation_queue"),
 		appOperationQueue:             workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "app_operation_processing_queue"),
 		projectRefreshQueue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "project_reconciliation_queue"),
 		appComparisonTypeRefreshQueue: workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
