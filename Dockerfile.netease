@@ -2,7 +2,7 @@
 ####################################################################################################
 # Argo CD Build stage which performs the actual build of Argo CD binaries
 ####################################################################################################
-FROM golang:1.14.1 as argocd-build
+FROM harbor.yf-online.service.163.org/golang/golang:1.21 as argocd-build
 ENV GOPROXY=https://goproxy.cn,direct
 
 COPY ./packr_1.21.9_linux_amd64.tar.gz /tmp/
