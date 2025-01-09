@@ -10,7 +10,7 @@ build:
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
     REPO_NAME: cloudnative
-    DOCKER_CONFIG_JSON: $DOCKER_AUTH_CONFIG_ONLINE
+    DOCKER_CONFIG_JSON: $DOCKER_AUTH_CONFIG_CN_EAST
   script:
     - |
       IMAGE="$REPOSITORY_PREFIX/argocd:$APP_REVISION"
