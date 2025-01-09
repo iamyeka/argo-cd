@@ -62,6 +62,7 @@ require (
 	golang.org/x/net v0.0.0-20191004110552-13f9640d40b9
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
+	golang.org/x/time v0.9.0 // indirect
 	google.golang.org/genproto v0.0.0-20190927181202-20e1ac93f88c
 	google.golang.org/grpc v1.26.0
 	gopkg.in/go-playground/webhooks.v5 v5.11.0
@@ -85,6 +86,8 @@ require (
 )
 
 replace (
+
+	github.com/argoproj/gitops-engine => ./other-modules/gitops-engine
 	github.com/golang/protobuf => github.com/golang/protobuf v1.3.2
 	github.com/grpc-ecosystem/grpc-gateway => github.com/grpc-ecosystem/grpc-gateway v1.12.2
 	github.com/improbable-eng/grpc-web => github.com/improbable-eng/grpc-web v0.0.0-20181111100011-16092bd1d58a
@@ -112,6 +115,4 @@ replace (
 	k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.18.8
 	k8s.io/metrics => k8s.io/metrics v0.18.8
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.18.8
-
-	github.com/argoproj/gitops-engine => ./other-modules/gitops-engine
 )
