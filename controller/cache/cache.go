@@ -36,6 +36,7 @@ const (
 	EnvClusterCacheWatchResyncDuration = "ARGOCD_CLUSTER_CACHE_WATCH_RESYNC_DURATION"
 	EnvClusterCacheSkipSomeEvents      = "ARGOCD_CLUSTER_CACHE_SKIP_SOME_EVENTS"
 	EnvClusterCacheSkipSomeRefreshes   = "ARGOCD_CLUSTER_CACHE_SKIP_SOME_REFRESHES"
+	EnvBatchEventsProcessing           = "ARGOCD_BATCH_EVENTS_PROCESSING"
 )
 
 // GitOps engine cluster cache tuning options
@@ -45,12 +46,14 @@ var (
 	clusterCacheWatchResyncDuration = 10 * time.Minute
 	clusterCacheSkipSomeEvents      = false
 	clusterCacheSkipSomeRefreshes   = false
+	batchEventsProcessing           = false
 )
 
 func init() {
 	clusterCacheWatchResyncDuration = ParseDurationFromEnv(EnvClusterCacheWatchResyncDuration, clusterCacheWatchResyncDuration, 0, math.MaxInt64)
 	clusterCacheSkipSomeEvents = ParseBoolFromEnv(EnvClusterCacheSkipSomeEvents, false)
 	clusterCacheSkipSomeRefreshes = ParseBoolFromEnv(EnvClusterCacheSkipSomeRefreshes, false)
+	batchEventsProcessing = ParseBoolFromEnv(EnvBatchEventsProcessing, false)
 }
 
 type LiveStateCache interface {
@@ -290,6 +293,7 @@ func (c *liveStateCache) getCluster(server string) (clustercache.ClusterCache, e
 		clustercache.SetNamespaces(cluster.Namespaces),
 		clustercache.SetWatchResyncTimeout(clusterCacheWatchResyncDuration),
 		clustercache.SetSkipSomeEvents(clusterCacheSkipSomeEvents),
+		clustercache.SetBatchEventsProcessing(batchEventsProcessing),
 		clustercache.SetPopulateResourceInfoHandler(func(un *unstructured.Unstructured, isRoot bool) (interface{}, bool) {
 			res := &ResourceInfo{}
 			populateNodeInfo(un, res)

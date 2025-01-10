@@ -119,3 +119,17 @@ func SetSkipSomeEvents(skipSomeEvents bool) UpdateSettingsFunc {
 		cache.enableSkipSomeEvents = skipSomeEvents
 	}
 }
+
+// SetBatchEventsProcessing allows to set whether to process events in batch
+func SetBatchEventsProcessing(batchProcessing bool) UpdateSettingsFunc {
+	return func(cache *clusterCache) {
+		cache.batchEventsProcessing = batchProcessing
+	}
+}
+
+// SetEventProcessingInterval allows to set the interval for processing events
+func SetEventProcessingInterval(interval time.Duration) UpdateSettingsFunc {
+	return func(cache *clusterCache) {
+		cache.eventProcessingInterval = interval
+	}
+}

@@ -42,11 +42,18 @@ const (
 	// Limit is required to avoid memory spikes during cache initialization.
 	// The default limit of 50 is chosen based on experiments.
 	defaultListSemaphoreWeight = 50
+	// defaultEventProcessingInterval is the default interval for processing events
+	defaultEventProcessingInterval = 100 * time.Millisecond
 )
 
 type apiMeta struct {
 	namespaced  bool
 	watchCancel context.CancelFunc
+}
+
+type eventMeta struct {
+	event watch.EventType
+	un    *unstructured.Unstructured
 }
 
 // ClusterInfo holds cluster cache stats
@@ -67,6 +74,9 @@ type ClusterInfo struct {
 
 // OnEventHandler is a function that handles Kubernetes event
 type OnEventHandler func(event watch.EventType, un *unstructured.Unstructured)
+
+// OnProcessEventsHandler handles process events event
+type OnProcessEventsHandler func(duration time.Duration, processedEventsNumber int)
 
 // OnPopulateResourceInfoHandler returns additional resource metadata that should be stored in cache
 type OnPopulateResourceInfoHandler func(un *unstructured.Unstructured, isRoot bool) (info interface{}, cacheManifest bool)
@@ -101,6 +111,8 @@ type ClusterCache interface {
 	OnResourceUpdated(handler OnResourceUpdatedHandler) Unsubscribe
 	// OnEvent register event handler that is executed every time when new K8S event received
 	OnEvent(handler OnEventHandler) Unsubscribe
+	// OnProcessEventsHandler register event handler that is executed every time when events were processed
+	OnProcessEventsHandler(handler OnProcessEventsHandler) Unsubscribe
 }
 
 type WeightedSemaphore interface {
@@ -116,6 +128,7 @@ func NewClusterCache(config *rest.Config, opts ...UpdateSettingsFunc) *clusterCa
 		watchResyncTimeout:      defaultWatchResyncTimeout,
 		settings:                Settings{ResourceHealthOverride: &noopSettings{}, ResourcesFilter: &noopSettings{}},
 		apisMeta:                make(map[schema.GroupKind]*apiMeta),
+		eventMetaCh:             nil,
 		listPageSize:            defaultListPageSize,
 		listPageBufferSize:      defaultListPageBufferSize,
 		listSemaphore:           semaphore.NewWeighted(defaultListSemaphoreWeight),
@@ -124,8 +137,10 @@ func NewClusterCache(config *rest.Config, opts ...UpdateSettingsFunc) *clusterCa
 		config:                  config,
 		kubectl:                 &kube.KubectlCmd{},
 		syncTime:                nil,
+		eventProcessingInterval: defaultEventProcessingInterval,
 		resourceUpdatedHandlers: map[uint64]OnResourceUpdatedHandler{},
 		eventHandlers:           map[uint64]OnEventHandler{},
+		processEventsHandlers:   map[uint64]OnProcessEventsHandler{},
 		log:                     log.WithField("server", config.Host),
 	}
 	for i := range opts {
@@ -135,12 +150,14 @@ func NewClusterCache(config *rest.Config, opts ...UpdateSettingsFunc) *clusterCa
 }
 
 type clusterCache struct {
-	resyncTimeout time.Duration
-	syncTime      *time.Time
-	syncError     error
-	apisMeta      map[schema.GroupKind]*apiMeta
-	serverVersion string
-	apiGroups     []metav1.APIGroup
+	resyncTimeout         time.Duration
+	syncTime              *time.Time
+	syncError             error
+	apisMeta              map[schema.GroupKind]*apiMeta
+	batchEventsProcessing bool
+	eventMetaCh           chan eventMeta
+	serverVersion         string
+	apiGroups             []metav1.APIGroup
 	// namespacedResources is a simple map which indicates a groupKind is namespaced
 	namespacedResources map[schema.GroupKind]bool
 
@@ -165,7 +182,10 @@ type clusterCache struct {
 	handlerKey                  uint64
 	populateResourceInfoHandler OnPopulateResourceInfoHandler
 	resourceUpdatedHandlers     map[uint64]OnResourceUpdatedHandler
-	eventHandlers               map[uint64]OnEventHandler
+	processEventsHandlers       map[uint64]OnProcessEventsHandler
+	// ticker interval for events processing
+	eventProcessingInterval time.Duration
+	eventHandlers           map[uint64]OnEventHandler
 
 	// maximum time we allow watches to run before relisting the group/kind and restarting the watch
 	watchResyncTimeout   time.Duration
@@ -215,6 +235,30 @@ func (c *clusterCache) getEventHandlers() []OnEventHandler {
 	defer c.handlersLock.Unlock()
 	handlers := make([]OnEventHandler, 0, len(c.eventHandlers))
 	for _, h := range c.eventHandlers {
+		handlers = append(handlers, h)
+	}
+	return handlers
+}
+
+// OnProcessEventsHandler register event handler that is executed every time when events were processed
+func (c *clusterCache) OnProcessEventsHandler(handler OnProcessEventsHandler) Unsubscribe {
+	c.handlersLock.Lock()
+	defer c.handlersLock.Unlock()
+	key := c.handlerKey
+	c.handlerKey++
+	c.processEventsHandlers[key] = handler
+	return func() {
+		c.handlersLock.Lock()
+		defer c.handlersLock.Unlock()
+		delete(c.processEventsHandlers, key)
+	}
+}
+
+func (c *clusterCache) getProcessEventsHandlers() []OnProcessEventsHandler {
+	c.handlersLock.Lock()
+	defer c.handlersLock.Unlock()
+	handlers := make([]OnProcessEventsHandler, 0, len(c.processEventsHandlers))
+	for _, h := range c.processEventsHandlers {
 		handlers = append(handlers, h)
 	}
 	return handlers
@@ -316,6 +360,9 @@ func (c *clusterCache) Invalidate(opts ...UpdateSettingsFunc) {
 	}
 	for i := range opts {
 		opts[i](c)
+	}
+	if c.batchEventsProcessing {
+		c.invalidateEventMeta()
 	}
 	c.apisMeta = nil
 	c.namespacedResources = nil
@@ -496,7 +543,7 @@ func (c *clusterCache) watchEvents(ctx context.Context, api kube.APIResourceInfo
 
 				st2 := time.Now()
 				c.log.Debugf(fmt.Sprintf("watchEvents: watched %s, %s on %s", obj.GetName(), event.Type, c.config.Host))
-				c.processEvent(event.Type, obj)
+				c.recordEvent(event.Type, obj)
 				c.log.Debugf(fmt.Sprintf("watchEvents: watched %s %s, %s on %s finished, cost %v",
 					obj.GetObjectKind().GroupVersionKind(), obj.GetName(), event.Type, c.config.Host, time.Since(st2)))
 				if kube.IsCRD(obj) {
@@ -547,6 +594,12 @@ func (c *clusterCache) sync() error {
 	for i := range c.apisMeta {
 		c.apisMeta[i].watchCancel()
 	}
+
+	if c.batchEventsProcessing {
+		c.invalidateEventMeta()
+		c.eventMetaCh = make(chan eventMeta)
+	}
+
 	c.apisMeta = make(map[schema.GroupKind]*apiMeta)
 	c.resources = make(map[kube.ResourceKey]*Resource)
 	c.namespacedResources = make(map[schema.GroupKind]bool)
@@ -571,6 +624,11 @@ func (c *clusterCache) sync() error {
 	if err != nil {
 		return err
 	}
+
+	if c.batchEventsProcessing {
+		go c.processEvents()
+	}
+
 	lock := sync.Mutex{}
 	err = kube.RunAllAsync(len(apis), func(i int) error {
 		api := apis[i]
@@ -621,6 +679,13 @@ func (c *clusterCache) sync() error {
 
 	c.log.Info("Cluster successfully synced")
 	return nil
+}
+
+func (c *clusterCache) invalidateEventMeta() {
+	if c.eventMetaCh != nil {
+		close(c.eventMetaCh)
+		c.eventMetaCh = nil
+	}
 }
 
 // EnsureSynced checks cache state and synchronizes it if necessary
@@ -782,34 +847,85 @@ func (c *clusterCache) GetManagedLiveObjs(targetObjs []*unstructured.Unstructure
 	return managedObjs, nil
 }
 
-func (c *clusterCache) processEvent(event watch.EventType, un *unstructured.Unstructured) {
+func (c *clusterCache) recordEvent(event watch.EventType, un *unstructured.Unstructured) {
 	key := kube.GetResourceKey(un)
 	if c.enableSkipSomeEvents && skipResourceEvent(key, event) {
 		return
 	}
 
-	st1 := time.Now()
 	for _, h := range c.getEventHandlers() {
 		h(event, un)
 	}
 	if event == watch.Modified && skipAppRequeing(key) {
 		return
 	}
-	c.log.Debugf("processEvent out lock: %s %s, %s on %s finished, cost %v", un.GroupVersionKind(), un.GetName(), event, c.config.Host, time.Since(st1))
+
+	if c.batchEventsProcessing {
+		c.eventMetaCh <- eventMeta{event, un}
+	} else {
+		c.lock.Lock()
+		defer c.lock.Unlock()
+		c.processEvent(key, eventMeta{event, un})
+	}
+}
+
+func (c *clusterCache) processEvents() {
+	c.log.Info("Start processing events")
 
 	c.lock.Lock()
-	defer c.lock.Unlock()
+	ch := c.eventMetaCh
+	c.lock.Unlock()
 
-	st2 := time.Now()
-	defer c.log.Debugf("processEvent in lock: %s %s, %s on %s finished, cost %v", un.GroupVersionKind(), un.GetName(), event, c.config.Host, time.Since(st2))
+	eventMetas := make([]eventMeta, 0)
+	ticker := time.NewTicker(c.eventProcessingInterval)
+	defer ticker.Stop()
 
+	for {
+		select {
+		case evMeta, ok := <-ch:
+			if !ok {
+				c.log.Info("Event processing channel closed, finish processing")
+				return
+			}
+			eventMetas = append(eventMetas, evMeta)
+		case <-ticker.C:
+			if len(eventMetas) > 0 {
+				c.processEventsBatch(eventMetas)
+				eventMetas = eventMetas[:0]
+			}
+		}
+	}
+}
+
+func (c *clusterCache) processEventsBatch(eventMetas []eventMeta) {
+	start := time.Now()
+	c.lock.Lock()
+	c.log.Info("Lock acquired (ms)", "duration", time.Since(start).Milliseconds())
+	defer func() {
+		c.lock.Unlock()
+		duration := time.Since(start)
+		// Update the metric with the duration of the events processing
+		for _, handler := range c.getProcessEventsHandlers() {
+			handler(duration, len(eventMetas))
+		}
+	}()
+
+	for _, evMeta := range eventMetas {
+		key := kube.GetResourceKey(evMeta.un)
+		c.processEvent(key, evMeta)
+	}
+
+	c.log.Info("Processed events (ms)", "count", len(eventMetas), "duration", time.Since(start).Milliseconds())
+}
+
+func (c *clusterCache) processEvent(key kube.ResourceKey, evMeta eventMeta) {
 	existingNode, exists := c.resources[key]
-	if event == watch.Deleted {
+	if evMeta.event == watch.Deleted {
 		if exists {
 			c.onNodeRemoved(key)
 		}
-	} else if event != watch.Deleted {
-		c.onNodeUpdated(existingNode, un)
+	} else {
+		c.onNodeUpdated(existingNode, evMeta.un)
 	}
 }
 
