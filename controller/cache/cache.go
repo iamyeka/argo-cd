@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"github.com/argoproj/argo-cd/util/env"
 	"math"
 	"os"
 	"reflect"
@@ -36,7 +37,10 @@ const (
 	EnvClusterCacheWatchResyncDuration = "ARGOCD_CLUSTER_CACHE_WATCH_RESYNC_DURATION"
 	EnvClusterCacheSkipSomeEvents      = "ARGOCD_CLUSTER_CACHE_SKIP_SOME_EVENTS"
 	EnvClusterCacheSkipSomeRefreshes   = "ARGOCD_CLUSTER_CACHE_SKIP_SOME_REFRESHES"
-	EnvBatchEventsProcessing           = "ARGOCD_BATCH_EVENTS_PROCESSING"
+	// EnvClusterCacheBatchEventsProcessing is the env variable to control whether to enable batch events processing
+	EnvClusterCacheBatchEventsProcessing = "ARGOCD_CLUSTER_CACHE_BATCH_EVENTS_PROCESSING"
+	// EnvClusterCacheEventProcessingInterval is the env variable to control the interval between processing events when BatchEventsProcessing is enabled
+	EnvClusterCacheEventProcessingInterval = "ARGOCD_CLUSTER_CACHE_EVENT_PROCESSING_INTERVAL"
 )
 
 // GitOps engine cluster cache tuning options
@@ -46,14 +50,20 @@ var (
 	clusterCacheWatchResyncDuration = 10 * time.Minute
 	clusterCacheSkipSomeEvents      = false
 	clusterCacheSkipSomeRefreshes   = false
-	batchEventsProcessing           = false
+
+	// clusterCacheBatchEventsProcessing specifies whether to enable batch events processing
+	clusterCacheBatchEventsProcessing = false
+
+	// clusterCacheEventProcessingInterval specifies the interval between processing events when BatchEventsProcessing is enabled
+	clusterCacheEventProcessingInterval = 100 * time.Millisecond
 )
 
 func init() {
 	clusterCacheWatchResyncDuration = ParseDurationFromEnv(EnvClusterCacheWatchResyncDuration, clusterCacheWatchResyncDuration, 0, math.MaxInt64)
 	clusterCacheSkipSomeEvents = ParseBoolFromEnv(EnvClusterCacheSkipSomeEvents, false)
 	clusterCacheSkipSomeRefreshes = ParseBoolFromEnv(EnvClusterCacheSkipSomeRefreshes, false)
-	batchEventsProcessing = ParseBoolFromEnv(EnvBatchEventsProcessing, false)
+	clusterCacheBatchEventsProcessing = env.ParseBoolFromEnv(EnvClusterCacheBatchEventsProcessing, false)
+	clusterCacheEventProcessingInterval = env.ParseDurationFromEnv(EnvClusterCacheEventProcessingInterval, clusterCacheEventProcessingInterval, 0, math.MaxInt64)
 }
 
 type LiveStateCache interface {
@@ -293,7 +303,8 @@ func (c *liveStateCache) getCluster(server string) (clustercache.ClusterCache, e
 		clustercache.SetNamespaces(cluster.Namespaces),
 		clustercache.SetWatchResyncTimeout(clusterCacheWatchResyncDuration),
 		clustercache.SetSkipSomeEvents(clusterCacheSkipSomeEvents),
-		clustercache.SetBatchEventsProcessing(batchEventsProcessing),
+		clustercache.SetBatchEventsProcessing(clusterCacheBatchEventsProcessing),
+		clustercache.SetEventProcessingInterval(clusterCacheEventProcessingInterval),
 		clustercache.SetPopulateResourceInfoHandler(func(un *unstructured.Unstructured, isRoot bool) (interface{}, bool) {
 			res := &ResourceInfo{}
 			populateNodeInfo(un, res)
@@ -340,6 +351,10 @@ func (c *liveStateCache) getCluster(server string) (clustercache.ClusterCache, e
 	_ = clusterCache.OnEvent(func(event watch.EventType, un *unstructured.Unstructured) {
 		gvk := un.GroupVersionKind()
 		c.metricsServer.IncClusterEventsCount(cluster.Server, gvk.Group, gvk.Kind)
+	})
+
+	_ = clusterCache.OnProcessEventsHandler(func(duration time.Duration, processedEventsNumber int) {
+		c.metricsServer.ObserveResourceEventsProcessingDuration(cluster.Server, duration, processedEventsNumber)
 	})
 
 	c.clusters[cluster.Server] = clusterCache

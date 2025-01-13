@@ -22,18 +22,20 @@ import (
 
 type MetricsServer struct {
 	*http.Server
-	syncCounter                  *prometheus.CounterVec
-	kubectlExecCounter           *prometheus.CounterVec
-	kubectlExecPendingGauge      *prometheus.GaugeVec
-	k8sRequestCounter            *prometheus.CounterVec
-	clusterEventsCounter         *prometheus.CounterVec
-	redisRequestCounter          *prometheus.CounterVec
-	reconcileHistogram           *prometheus.HistogramVec
-	redisRequestHistogram        *prometheus.HistogramVec
-	registry                     *prometheus.Registry
-	resourceTreeWaitingCounter   *prometheus.CounterVec
-	resourceTreeRunningCounter   *prometheus.CounterVec
-	resourceTreeWaitingHistogram *prometheus.HistogramVec
+	syncCounter                       *prometheus.CounterVec
+	kubectlExecCounter                *prometheus.CounterVec
+	kubectlExecPendingGauge           *prometheus.GaugeVec
+	k8sRequestCounter                 *prometheus.CounterVec
+	clusterEventsCounter              *prometheus.CounterVec
+	redisRequestCounter               *prometheus.CounterVec
+	reconcileHistogram                *prometheus.HistogramVec
+	redisRequestHistogram             *prometheus.HistogramVec
+	resourceEventsProcessingHistogram *prometheus.HistogramVec
+	resourceEventsNumberGauge         *prometheus.GaugeVec
+	registry                          *prometheus.Registry
+	resourceTreeWaitingCounter        *prometheus.CounterVec
+	resourceTreeRunningCounter        *prometheus.CounterVec
+	resourceTreeWaitingHistogram      *prometheus.HistogramVec
 }
 
 const (
@@ -161,6 +163,20 @@ var (
 				3000.0,
 			},
 		}, []string{"dest_server"})
+
+	resourceEventsProcessingHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "argocd_resource_events_processing",
+			Help:    "Time to process resource events in seconds.",
+			Buckets: []float64{0.25, .5, 1, 2, 4, 8, 16},
+		},
+		[]string{"server"},
+	)
+
+	resourceEventsNumberGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "argocd_resource_events_processed_in_batch",
+		Help: "Number of resource events processed in batch",
+	}, []string{"server"})
 )
 
 // NewMetricsServer returns a new prometheus server which collects application metrics
@@ -187,6 +203,8 @@ func NewMetricsServer(addr string, appLister applister.ApplicationLister, health
 	registry.MustRegister(reconcileWaitingTimeCounter)
 	registry.MustRegister(reconcileRunningTimeCounter)
 	registry.MustRegister(reconcileWaitingTimeHistogram)
+	registry.MustRegister(resourceEventsProcessingHistogram)
+	registry.MustRegister(resourceEventsNumberGauge)
 
 	return &MetricsServer{
 		registry: registry,
@@ -194,17 +212,19 @@ func NewMetricsServer(addr string, appLister applister.ApplicationLister, health
 			Addr:    addr,
 			Handler: mux,
 		},
-		syncCounter:                  syncCounter,
-		k8sRequestCounter:            k8sRequestCounter,
-		kubectlExecCounter:           kubectlExecCounter,
-		kubectlExecPendingGauge:      kubectlExecPendingGauge,
-		reconcileHistogram:           reconcileHistogram,
-		clusterEventsCounter:         clusterEventsCounter,
-		redisRequestCounter:          redisRequestCounter,
-		redisRequestHistogram:        redisRequestHistogram,
-		resourceTreeWaitingCounter:   reconcileWaitingTimeCounter,
-		resourceTreeRunningCounter:   reconcileRunningTimeCounter,
-		resourceTreeWaitingHistogram: reconcileWaitingTimeHistogram,
+		syncCounter:                       syncCounter,
+		k8sRequestCounter:                 k8sRequestCounter,
+		kubectlExecCounter:                kubectlExecCounter,
+		kubectlExecPendingGauge:           kubectlExecPendingGauge,
+		reconcileHistogram:                reconcileHistogram,
+		clusterEventsCounter:              clusterEventsCounter,
+		redisRequestCounter:               redisRequestCounter,
+		redisRequestHistogram:             redisRequestHistogram,
+		resourceTreeWaitingCounter:        reconcileWaitingTimeCounter,
+		resourceTreeRunningCounter:        reconcileRunningTimeCounter,
+		resourceTreeWaitingHistogram:      reconcileWaitingTimeHistogram,
+		resourceEventsProcessingHistogram: resourceEventsProcessingHistogram,
+		resourceEventsNumberGauge:         resourceEventsNumberGauge,
 	}
 }
 
@@ -277,6 +297,12 @@ func (m *MetricsServer) ObserveResourceTreeWaitingTime(app *argoappv1.Applicatio
 // IncReconcile increments the reconcile counter for an application
 func (m *MetricsServer) IncReconcile(app *argoappv1.Application, duration time.Duration) {
 	m.reconcileHistogram.WithLabelValues(app.Namespace, app.Spec.Destination.Server).Observe(duration.Seconds())
+}
+
+// ObserveResourceEventsProcessingDuration observes resource events processing duration
+func (m *MetricsServer) ObserveResourceEventsProcessingDuration(server string, duration time.Duration, processedEventsNumber int) {
+	m.resourceEventsProcessingHistogram.WithLabelValues(server).Observe(duration.Seconds())
+	m.resourceEventsNumberGauge.WithLabelValues(server).Set(float64(processedEventsNumber))
 }
 
 type appCollector struct {
