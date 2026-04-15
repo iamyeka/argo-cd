@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"path"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -172,11 +173,12 @@ type clusterCache struct {
 	resources map[kube.ResourceKey]*Resource
 	nsIndex   map[string]map[kube.ResourceKey]*Resource
 
-	kubectl    kube.Kubectl
-	log        *log.Entry
-	config     *rest.Config
-	namespaces []string
-	settings   Settings
+	kubectl            kube.Kubectl
+	log                *log.Entry
+	config             *rest.Config
+	namespaces         []string
+	resolvedNamespaces []string
+	settings           Settings
 
 	handlersLock                sync.Mutex
 	handlerKey                  uint64
@@ -579,13 +581,53 @@ func (c *clusterCache) processApi(client dynamic.Interface, api kube.APIResource
 		return nil
 	}
 
-	for _, ns := range c.namespaces {
+	for _, ns := range c.resolvedNamespaces {
 		err := callback(resClient.Namespace(ns), ns)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (c *clusterCache) resolveNamespacePatterns(client dynamic.Interface) []string {
+	hasGlob := false
+	for _, ns := range c.namespaces {
+		if strings.ContainsAny(ns, "*?[") {
+			hasGlob = true
+			break
+		}
+	}
+	if !hasGlob {
+		return c.namespaces
+	}
+
+	nsGVR := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "namespaces"}
+	nsList, err := client.Resource(nsGVR).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		c.log.Warnf("Failed to list namespaces for glob resolution, using patterns as-is: %v", err)
+		return c.namespaces
+	}
+
+	var resolved []string
+	seen := make(map[string]bool)
+	for _, item := range nsList.Items {
+		nsName := item.GetName()
+		for _, pattern := range c.namespaces {
+			if strings.ContainsAny(pattern, "*?[") {
+				if matched, _ := path.Match(pattern, nsName); matched && !seen[nsName] {
+					resolved = append(resolved, nsName)
+					seen[nsName] = true
+				}
+			} else if nsName == pattern && !seen[nsName] {
+				resolved = append(resolved, nsName)
+				seen[nsName] = true
+			}
+		}
+	}
+
+	c.log.Infof("Resolved namespace patterns %v to %d namespaces: %v", c.namespaces, len(resolved), resolved)
+	return resolved
 }
 
 func (c *clusterCache) sync() error {
@@ -624,6 +666,8 @@ func (c *clusterCache) sync() error {
 	if err != nil {
 		return err
 	}
+
+	c.resolvedNamespaces = c.resolveNamespacePatterns(client)
 
 	if c.batchEventsProcessing {
 		go c.processEvents()
