@@ -1,0 +1,36 @@
+other-modules/gitops-engine/pkg/cache/cluster.go
+  e44d697c36f552cc 6,179-181,584,593-632,670-671
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "2970f4129fadf8c3919d0acb1b6c2d6fc0b26767",
+  "prompts": {
+    "345b937da3b57d12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cdffe27b-6661-41ea-aaad-0420ef9395a7",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Ryan Wu",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 30,
+      "overriden_lines": 0
+    },
+    "e44d697c36f552cc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4f25674b-6611-4f9a-9ccf-89a807139198",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Ryan Wu",
+      "messages": [],
+      "total_additions": 1113,
+      "total_deletions": 3,
+      "accepted_lines": 47,
+      "overriden_lines": 0
+    }
+  }
+}
