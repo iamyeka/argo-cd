@@ -597,7 +597,7 @@ func (c *clusterCache) sync() error {
 
 	if c.batchEventsProcessing {
 		c.invalidateEventMeta()
-		c.eventMetaCh = make(chan eventMeta)
+		c.eventMetaCh = make(chan eventMeta, 4096)
 	}
 
 	c.apisMeta = make(map[schema.GroupKind]*apiMeta)
