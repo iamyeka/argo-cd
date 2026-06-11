@@ -19,5 +19,5 @@ RUN make controller
 ####################################################################################################
 # Final image
 ####################################################################################################
-FROM harbor.yf-online.service.163.org/cloudnative/argocd/argoproj/argocd:v1.7.6 as base
+FROM harbor.yf-online.service.163.org/cloudnative/argocd/argoproj/argocd:v1.7.6.2 as base
 COPY --from=argocd-build /go/src/github.com/argoproj/argo-cd/dist/argocd-application-controller /usr/local/bin/
