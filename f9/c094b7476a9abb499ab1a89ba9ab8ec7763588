@@ -2,7 +2,7 @@
 {
   "schema_version": "authorship/3.0.0",
   "git_ai_version": "1.2.8-ntes.9",
-  "base_commit_sha": "7b99cc5b19a8153da70adfd8b5e7d97ea033bce6",
+  "base_commit_sha": "f9c094b7476a9abb499ab1a89ba9ab8ec7763588",
   "prompts": {
     "345b937da3b57d12": {
       "agent_id": {
