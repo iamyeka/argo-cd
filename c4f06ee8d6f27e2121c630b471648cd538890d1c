@@ -1,0 +1,26 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8-ntes.9",
+  "base_commit_sha": "c4f06ee8d6f27e2121c630b471648cd538890d1c",
+  "prompts": {
+    "345b937da3b57d12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cdffe27b-6661-41ea-aaad-0420ef9395a7",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Ryan Wu",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 30,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "docs/operator-manual/argocd-high-cpu-stale-cache-analysis.md": {
+          "accepted_lines": 30
+        }
+      }
+    }
+  }
+}
