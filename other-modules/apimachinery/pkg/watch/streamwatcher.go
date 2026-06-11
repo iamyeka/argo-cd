@@ -140,6 +140,7 @@ func (sw *StreamWatcher) receive() {
 			Object: obj,
 		}:
 		case <-sw.done:
+			return
 		}
 	}
 }
