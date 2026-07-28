@@ -1,0 +1,28 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8-ntes.9",
+  "base_commit_sha": "3ea9e57ea9002675307b726984a019c202c08d75",
+  "prompts": {
+    "9ef403f22f7e4114": {
+      "agent_id": {
+        "tool": "github-copilot-jetbrains",
+        "id": "1785135815509",
+        "model": "unknown"
+      },
+      "human_author": "Ryan Wu",
+      "messages": [],
+      "total_additions": 3,
+      "total_deletions": 3,
+      "accepted_lines": 0,
+      "overriden_lines": 1,
+      "per_file_stats": {
+        "other-modules/gitops-engine/pkg/cache/settings.go": {
+          "additions": 3,
+          "deletions": 3,
+          "overriden_lines": 1
+        }
+      }
+    }
+  }
+}
