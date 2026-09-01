@@ -30,6 +30,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/net/http2"
 	"k8s.io/klog"
@@ -113,6 +114,46 @@ func SetOldTransportDefaults(t *http.Transport) *http.Transport {
 	return t
 }
 
+const (
+	// EnvArgoCDHTTP2ReadIdleTimeout controls how long a connection may stay
+	// without receiving any frame before an HTTP/2 PING health check is sent.
+	EnvArgoCDHTTP2ReadIdleTimeout = "ARGOCD_HTTP2_READ_IDLE_TIMEOUT"
+	// EnvArgoCDHTTP2PingTimeout controls how long a PING health check may go
+	// unanswered before the connection is considered dead and closed.
+	EnvArgoCDHTTP2PingTimeout = "ARGOCD_HTTP2_PING_TIMEOUT"
+)
+
+const (
+	defaultHTTP2ReadIdleTimeout = 30 * time.Second
+	defaultHTTP2PingTimeout     = 15 * time.Second
+)
+
+// durationFromEnv returns the duration value of the given environment variable,
+// falling back to def when unset or invalid. "0" disables the setting.
+func durationFromEnv(name string, def time.Duration) time.Duration {
+	if s := os.Getenv(name); s != "" {
+		if d, err := time.ParseDuration(s); err == nil && d >= 0 {
+			return d
+		}
+		klog.Warningf("Invalid value for %s: %q, using default %v", name, s, def)
+	}
+	return def
+}
+
+// configureHTTP2 enables HTTP/2 on the transport and turns on PING-based
+// connection health checking. Without it, a watch connection silently dropped
+// by a middlebox (no GOAWAY, no RST) blocks forever in http2 pipe.Read, and
+// nothing up the chain (RetryWatcher, watchEvents) ever notices.
+func configureHTTP2(t *http.Transport) (*http2.Transport, error) {
+	t2, err := http2.ConfigureTransports(t)
+	if err != nil {
+		return nil, err
+	}
+	t2.ReadIdleTimeout = durationFromEnv(EnvArgoCDHTTP2ReadIdleTimeout, defaultHTTP2ReadIdleTimeout)
+	t2.PingTimeout = durationFromEnv(EnvArgoCDHTTP2PingTimeout, defaultHTTP2PingTimeout)
+	return t2, nil
+}
+
 // SetTransportDefaults applies the defaults from http.DefaultTransport
 // for the Proxy, Dial, and TLSHandshakeTimeout fields if unset
 func SetTransportDefaults(t *http.Transport) *http.Transport {
@@ -121,7 +162,7 @@ func SetTransportDefaults(t *http.Transport) *http.Transport {
 	if s := os.Getenv("DISABLE_HTTP2"); len(s) > 0 {
 		klog.Infof("HTTP2 has been explicitly disabled")
 	} else if allowsHTTP2(t) {
-		if err := http2.ConfigureTransport(t); err != nil {
+		if _, err := configureHTTP2(t); err != nil {
 			klog.Warningf("Transport failed http2 configuration: %v", err)
 		}
 	}

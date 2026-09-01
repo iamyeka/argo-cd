@@ -58,11 +58,11 @@ require (
 	github.com/stretchr/testify v1.6.1
 	github.com/vmihailenco/msgpack v3.3.1+incompatible
 	github.com/yuin/gopher-lua v0.0.0-20190115140932-732aa6820ec4
-	golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
-	golang.org/x/net v0.0.0-20191004110552-13f9640d40b9
+	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
+	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
-	golang.org/x/time v0.9.0 // indirect
+	golang.org/x/time v0.9.0
 	google.golang.org/genproto v0.0.0-20190927181202-20e1ac93f88c
 	google.golang.org/grpc v1.26.0
 	gopkg.in/go-playground/webhooks.v5 v5.11.0
@@ -86,11 +86,13 @@ require (
 )
 
 replace (
-
 	github.com/argoproj/gitops-engine => ./other-modules/gitops-engine
 	github.com/golang/protobuf => github.com/golang/protobuf v1.3.2
 	github.com/grpc-ecosystem/grpc-gateway => github.com/grpc-ecosystem/grpc-gateway v1.12.2
 	github.com/improbable-eng/grpc-web => github.com/improbable-eng/grpc-web v0.0.0-20181111100011-16092bd1d58a
+	// pinned: newer x/sys breaks docker/docker@v17 pkg/term on darwin/arm64
+	// (undefined: unix.SYS_IOCTL); http2/idna do not require the newer version.
+	golang.org/x/sys => golang.org/x/sys v0.0.0-20191026070338-33540a1f6037
 
 	google.golang.org/grpc => google.golang.org/grpc v1.15.0
 
